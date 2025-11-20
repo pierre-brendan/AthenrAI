@@ -1,16 +1,20 @@
-/*! Paywall-Lite SDK v0.1 */
+/*! Paywall-Lite SDK v0.2 - MVP Safe Version */
 (function () {
   const script = document.currentScript;
   const SITE = script.dataset.site || "default-site";
   const FREE_VIEWS = parseInt(script.dataset.freeViews || "3", 10);
   const SHOW_REGWALL = script.dataset.showRegwall === "true";
   const BOT_TEXT = script.dataset.botText || "This content is protected.";
-  const API = script.dataset.api || "https://api.paywall-lite.com";
+  const API = script.dataset.api || ""; // fail-open default
 
   const STORAGE_KEY = `pw_meter_${SITE}`;
-  const isBotUA = /bot|crawl|spider|chatgpt|gptbot|perplexity/i.test(navigator.userAgent);
+  const isBotUA = /bot|crawl|spider|chatgpt|gptbot|perplexity/i.test(
+    navigator.userAgent
+  );
 
-  // ---- 1. Determine Content Target ----
+  // ---------------------------
+  // 1. CONTENT TARGET
+  // ---------------------------
   function findContent() {
     return (
       document.querySelector("[data-paywall]") ||
@@ -20,29 +24,21 @@
     );
   }
 
-  // ---- 2. Server meter check (optional for MVP) ----
-  async function serverCheck(path) {
-    try {
-      const r = await fetch(`${API}/meter/check`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ site: SITE, path }),
-      });
-      return r.ok ? r.json() : { allowed: true };
-    } catch {
-      return { allowed: true }; // fail-open
-    }
+  // ---------------------------
+  // 2. SERVER METER (NO-OP FOR MVP)
+  // ---------------------------
+  async function serverCheck() {
+    // MVP: Always allow, no backend needed
+    return { allowed: true };
   }
 
-  async function serverHit(path) {
-    fetch(`${API}/meter/hit`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ site: SITE, path }),
-    });
+  async function serverHit() {
+    // MVP: No-op
   }
 
-  // ---- 3. Local meter logic ----
+  // ---------------------------
+  // 3. LOCAL METER
+  // ---------------------------
   function loadMeter() {
     try {
       return JSON.parse(localStorage.getItem(STORAGE_KEY) || "0");
@@ -50,11 +46,14 @@
       return 0;
     }
   }
+
   function saveMeter(v) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(v));
   }
 
-  // ---- 4. Bot Mode ----
+  // ---------------------------
+  // 4. BOT VERSION
+  // ---------------------------
   function showBotVersion(target) {
     target.innerHTML = `<div style="padding:2rem;font-size:1.2rem;line-height:1.5;">
       ${BOT_TEXT}
@@ -62,7 +61,9 @@
     target.style.filter = "none";
   }
 
-  // ---- 5. Regwall ----
+  // ---------------------------
+  // 5. REGWALL (FIXED)
+  // ---------------------------
   function showRegwall(target) {
     const overlay = document.createElement("div");
     overlay.style = `
@@ -77,7 +78,7 @@
         <p>Get 1 free article after confirming.</p>
         <input id="pw_email" type="email" placeholder="Email" 
                style="width:100%;padding:8px;margin:12px 0;">
-        <button id="pw_submit" 
+        <button id="pw_submit"
                 style="width:100%;padding:10px;background:#222;color:#fff;border:none;border-radius:4px;cursor:pointer;">
           Continue
         </button>
@@ -88,32 +89,45 @@
     `;
     document.body.appendChild(overlay);
 
+    // ---- SUBMIT HANDLER (NOW FAIL-OPEN) ----
     overlay.querySelector("#pw_submit").onclick = async () => {
-  const email = overlay.querySelector("#pw_email").value;
-  if (!email) return alert("Email required");
+      const email = overlay.querySelector("#pw_email").value;
+      if (!email) return alert("Email required");
 
-  try {
-    await fetch(`${API}/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ site: SITE, email, path: location.pathname }),
-    });
-  } catch (e) {
-    console.warn("Register endpoint failed, continuing anyway.");
-  }
+      // Attempt to call backend, but ALWAYS continue
+      try {
+        if (API) {
+          await fetch(`${API}/register`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              site: SITE,
+              email,
+              path: location.pathname,
+            }),
+          });
+        }
+      } catch (e) {
+        console.warn("Backend not reachable — continuing anyway.");
+      }
 
-  saveMeter(0); // reset meter
-  overlay.remove();
-  target.style.filter = "none"; // UNBLUR
-};
+      // Unlock content
+      saveMeter(0);
+      overlay.remove();
+      target.style.filter = "none";
+    };
 
+    // ---- CLOSE ----
     overlay.querySelector("#pw_close").onclick = (e) => {
       e.preventDefault();
       overlay.remove();
+      target.style.filter = "none"; // fail-open
     };
   }
 
-  // ---- 6. Paywall Overlay ----
+  // ---------------------------
+  // 6. PAYWALL OVERLAY
+  // ---------------------------
   function showPaywall(target) {
     const overlay = document.createElement("div");
     overlay.style = `
@@ -145,26 +159,27 @@
     }
   }
 
-  // ---- 7. Core Logic ----
+  // ---------------------------
+  // 7. CORE LOGIC
+  // ---------------------------
   async function initPaywall() {
     const target = findContent();
     if (!target) return;
 
-    // Blur immediately to prevent content flash
+    // Blur immediately
     target.style.filter = "blur(3px)";
 
-    // --- Bot Mode (UA or No-JS fallback)
+    // ---- Bot mode ----
     if (isBotUA) {
       showBotVersion(target);
       return;
     }
 
     const path = location.pathname;
-
-    // Local meter first
     let count = loadMeter();
+
+    // Allow content if meter not exceeded
     if (count < FREE_VIEWS) {
-      // Let user read, still blur until server check completes
       const server = await serverCheck(path);
 
       if (server.allowed) {
@@ -176,10 +191,12 @@
       }
     }
 
-    // User exceeded meter → show paywall
+    // Limit exceeded
     showPaywall(target);
   }
 
-  // ---- 8. Init on DOM ready ----
+  // ---------------------------
+  // 8. START
+  // ---------------------------
   document.addEventListener("DOMContentLoaded", initPaywall);
 })();
