@@ -89,19 +89,23 @@
     document.body.appendChild(overlay);
 
     overlay.querySelector("#pw_submit").onclick = async () => {
-      const email = overlay.querySelector("#pw_email").value;
-      if (!email) return alert("Email required");
+  const email = overlay.querySelector("#pw_email").value;
+  if (!email) return alert("Email required");
 
-      await fetch(`${API}/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ site: SITE, email, path: location.pathname }),
-      });
+  try {
+    await fetch(`${API}/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ site: SITE, email, path: location.pathname }),
+    });
+  } catch (e) {
+    console.warn("Register endpoint failed, continuing anyway.");
+  }
 
-      saveMeter(0); // reset
-      overlay.remove();
-      target.style.filter = "none";
-    };
+  saveMeter(0); // reset meter
+  overlay.remove();
+  target.style.filter = "none"; // UNBLUR
+};
 
     overlay.querySelector("#pw_close").onclick = (e) => {
       e.preventDefault();
