@@ -5,7 +5,7 @@ Add this script tag to your site:
 
 ```html
 <script 
-  src="https://raw.githubusercontent.com/<username>/paywall-lite/main/sdk.js"
+  src="https://raw.githubusercontent.com/pierre-brendan/AthenrAI/main/sdk.js"
   data-site="SITE123"
   data-free-views="3"
   data-show-regwall="true"
