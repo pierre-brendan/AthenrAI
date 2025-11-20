@@ -1,0 +1,15 @@
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Node (if you ever add a backend later)
+node_modules/
+npm-debug.log
+
+# Logs
+*.log
+
+# Editor junk
+.vscode/
+.idea/
+*.swp
